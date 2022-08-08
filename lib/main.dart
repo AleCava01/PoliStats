@@ -7,7 +7,6 @@ import 'package:http/http.dart' as http;
 import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as parser;
 import 'package:webview_flutter/webview_flutter.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'studente.dart';
 import 'sessione.dart';
@@ -52,13 +51,7 @@ class WebViewExampleState extends State<WebViewExample> {
 
 
   @override
-  //-------------------------------------------------------_getFilePath(fileName)
-  Future<String> getFilePath(String fileName) async {
-    Directory appDocumentsDirectory = await getApplicationDocumentsDirectory(); // 1
-    String appDocumentsPath = appDocumentsDirectory.path; // 2
-    String filePath = '$appDocumentsPath/$fileName'; // 3
-    return filePath;
-  }
+
   //-------------------------------------------------------------loadFileData()
   Future<int> _loadFileData() async {
     await _loadEsami();
@@ -66,6 +59,22 @@ class WebViewExampleState extends State<WebViewExample> {
     return 0;
   }
   Future<int> _loadStudente() async{
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String jsonStudente = prefs.getString('studente_key') ?? '';
+    if(jsonStudente==''){
+      print("No data");
+    }
+    else{
+      //print('Loaded json $jsonStudente');
+      Map<String, dynamic> map = jsonDecode(jsonStudente);
+      Studente studente = Studente.fromJson(map);
+      _studente.nome=studente.nome;
+      _studente.corsoDiStudi=studente.corsoDiStudi;
+      _studente.codicePersona=studente.codicePersona;
+      _studente.matricola=studente.matricola;
+      _studente.email=studente.email;
+      _studente.cognome=studente.cognome;
+    }
     return 0;
   }
   Future<int> _loadEsami() async{
@@ -76,23 +85,20 @@ class WebViewExampleState extends State<WebViewExample> {
     return 0;
 
   }
-  void readFile() async {
-    File file = File(await getFilePath("demoFile.txt")); // 1
-    String fileContent = await file.readAsString(); // 2
-    print('File Content: $fileContent');
-  }
   //-----------------------------------------------------------writeStudente()
   Future<int> _writeStudente() async{
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String jsonStudente = jsonEncode(_studente);
     print("Generated json studente $jsonStudente");
+    prefs.setString('studente_key',jsonStudente);
     return 0;
   }
   //-----------------------------------------------------------clearData()
-  clearData() async{
+  Future<int> _clearData() async{
     SharedPreferences prefs = await SharedPreferences.getInstance();
     prefs.clear();
     print("Data cleared");
+    return 0;
   }
   //-----------------------------------------------------------initState()
   void initState() {
@@ -227,7 +233,6 @@ class WebViewExampleState extends State<WebViewExample> {
       return Text('Si è verificato un minchia di errore, si prega di riprovare a loggare');
     }
     else{
-      print(_url);
       return ListView(
         padding: const EdgeInsets.all(8),
         children: _buildList(),
@@ -255,6 +260,30 @@ class WebViewExampleState extends State<WebViewExample> {
   List<Widget> _buildList()  {
     var list = <Widget>[];
     list.clear();
+    list.add(TextButton(
+      style: ButtonStyle(
+        foregroundColor: MaterialStateProperty.all<Color>(Colors.blue),
+      ),
+      onPressed: () async {await _writeStudente(); },
+      child: Text('Salva'),
+    )
+    );
+    list.add(TextButton(
+      style: ButtonStyle(
+        foregroundColor: MaterialStateProperty.all<Color>(Colors.blue),
+      ),
+      onPressed: () async {await _loadStudente(); },
+      child: Text('Carica'),
+    )
+    );
+    list.add(TextButton(
+      style: ButtonStyle(
+        foregroundColor: MaterialStateProperty.all<Color>(Colors.blue),
+      ),
+      onPressed: () async {await _clearData(); },
+      child: Text('Erasa'),
+    )
+    );
     for(Esame esame in _esami){
       list.add( Expanded(child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
