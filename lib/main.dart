@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:webview_cookie_manager/webview_cookie_manager.dart';
 import 'package:flutter/material.dart';
@@ -7,7 +8,10 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as parser;
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:path_provider/path_provider.dart';
-
+import 'package:shared_preferences/shared_preferences.dart';
+import 'studente.dart';
+import 'sessione.dart';
+import 'esame.dart';
 
 //--------------------------------------------------------------------------Main
 
@@ -28,31 +32,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-//-------------------------------------------------------------------Oggetti
-class Student{
-  String codicePersona;
-  String matricola;
-  String nome;
-  String cognome;
-  String email;
-  String corsoDiStudi;
-
-  Student({required this.codicePersona, required this.matricola, required this.nome,required this.cognome,required this.email,required this.corsoDiStudi});
-  changeCodicePersona(String newCodicePersona){
-    codicePersona=newCodicePersona;
-  }
-}
-class Esame{
-  String descrizione;
-  String semestre;
-  String statoEsame;
-  String crediti;
-  String docenti;
-  String dataEsame;
-  String voto;
-
-  Esame({required this.descrizione, required this.semestre, required this.statoEsame,required this.crediti,required this.docenti,required this.dataEsame,required this.voto});
-}
 //-------------------------------------------------------------------Application
 
 class WebViewExample extends StatefulWidget {
@@ -61,8 +40,10 @@ class WebViewExample extends StatefulWidget {
 }
 
 class WebViewExampleState extends State<WebViewExample> {
-  final _studente=new Student(corsoDiStudi: '', nome: '', matricola: '', email: '', cognome: '', codicePersona: '');
+  final _studente=new Studente(corsoDiStudi: '', nome: '', matricola: '', email: '', cognome: '', codicePersona: '');
   final _esami = <Esame>{};
+  final _sessioni = <Sessione>[];
+
   final _pastoneRows = <String>[];
   final cookieManager = WebviewCookieManager();
   late WebViewController controller;
@@ -71,13 +52,55 @@ class WebViewExampleState extends State<WebViewExample> {
 
 
   @override
-  //-------------------------------------------------------General
+  //-------------------------------------------------------_getFilePath(fileName)
+  Future<String> getFilePath(String fileName) async {
+    Directory appDocumentsDirectory = await getApplicationDocumentsDirectory(); // 1
+    String appDocumentsPath = appDocumentsDirectory.path; // 2
+    String filePath = '$appDocumentsPath/$fileName'; // 3
+    return filePath;
+  }
+  //-------------------------------------------------------------loadFileData()
+  Future<int> _loadFileData() async {
+    await _loadEsami();
+    await _loadStudente();
+    return 0;
+  }
+  Future<int> _loadStudente() async{
+    return 0;
+  }
+  Future<int> _loadEsami() async{
+    return 0;
+
+  }
+  Future<int> _loadSessioni() async{
+    return 0;
+
+  }
+  void readFile() async {
+    File file = File(await getFilePath("demoFile.txt")); // 1
+    String fileContent = await file.readAsString(); // 2
+    print('File Content: $fileContent');
+  }
+  //-----------------------------------------------------------writeStudente()
+  Future<int> _writeStudente() async{
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String jsonStudente = jsonEncode(_studente);
+    print("Generated json studente $jsonStudente");
+    return 0;
+  }
+  //-----------------------------------------------------------clearData()
+  clearData() async{
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    prefs.clear();
+    print("Data cleared");
+  }
+  //-----------------------------------------------------------initState()
   void initState() {
     super.initState();
     // Enable virtual display.
     if (Platform.isAndroid) WebView.platform = AndroidWebView();
   }
-
+  //----------------------------------------------------------build
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -85,22 +108,22 @@ class WebViewExampleState extends State<WebViewExample> {
         title: Text("PoliStats"),
         actions:[
           IconButton(
-            onPressed: _pushSaved,
+            onPressed: _pushHomepage,
             icon: const Icon(Icons.list),
-            tooltip: 'Saved Suggestions',
+            tooltip: 'Esami',
           ),
           IconButton(
             onPressed: _pushWebView,
             icon: const Icon(Icons.star),
-            tooltip: 'Saved Suggestions',
+            tooltip: 'WebView',
           ),
         ],
       ),
       body: _buildLogin(),
     );
   }
-
-  Future<void> _pushSaved() async {
+  //-----------------------------------------------------------routing
+  Future<void> _pushHomepage() async {
     await getWebsiteData();
     Navigator.of(context).push(
         MaterialPageRoute<void>(
@@ -132,7 +155,7 @@ class WebViewExampleState extends State<WebViewExample> {
         )
     );
   }
-  //-------------------------------------------------Login handler
+  //--------------------------------------------------------Login handler()
   Future<void> collectCookies(String url) async {
     this._cookies.clear();
     final gotCookies = await cookieManager.getCookies(url);
@@ -181,62 +204,33 @@ class WebViewExampleState extends State<WebViewExample> {
       ),
     );
   }
-  //-------------------------------------------------------Scraper
-  Future<String> getFilePath() async {
-    Directory appDocumentsDirectory = await getApplicationDocumentsDirectory(); // 1
-    String appDocumentsPath = appDocumentsDirectory.path; // 2
-    String filePath = '$appDocumentsPath/demoTextFile.txt'; // 3
-
-    return filePath;
-  }
-
+  //-------------------------------------------------------getWebsiteData()
   Future getWebsiteData() async {
-    print("Scraping...");
-    String headerCookie = '';
+    _pastoneRows.clear();
     int i=1;
-    for(Cookie cookie in _cookies){
-      if (i!=1){
-        headerCookie += cookie.toString();
-      }
-
-    }
     http.Response response = await http.get(
         Uri.parse(_url),
         headers: {'Cookie': _cookies.last.toString()}
     );
     dom.Document document = parser.parse(response.body);
-    File file = File(await getFilePath());
     for (dom.Element element in document.getElementsByTagName("tr")) {
       this._pastoneRows.add(element.text);
       //file.writeAsString(element.text);
-      print('////////////////////////////////////////////////');
-      print(element.text);
-      print('////////////////////////////////////////////////');
-
+      //print(element.text);
     }
     await _dataProcessor();
 
   }
-  void readFile() async {
-    File file = File(await getFilePath()); // 1
-    String fileContent = await file.readAsString(); // 2
-
-    print('File Content: $fileContent');
-  }
+  //------------------------------------------------------_buildHome() v0
   Widget _buildHome(){
     if(_pastoneRows.isEmpty){
       return Text('Si è verificato un minchia di errore, si prega di riprovare a loggare');
     }
     else{
       print(_url);
-      return Scaffold(
-          appBar: AppBar(
-            title: Text(_buildMedia()),
-          ),
-          body: ListView(
-            padding: const EdgeInsets.all(8),
-            children: _buildList(),
-          ),
+      return ListView(
+        padding: const EdgeInsets.all(8),
+        children: _buildList(),
       );
     }
   }
@@ -257,25 +251,24 @@ class WebViewExampleState extends State<WebViewExample> {
     }
     return (somma/conta).toStringAsFixed(2);
 
-  }
+  }//----------------temp
   List<Widget> _buildList()  {
     var list = <Widget>[];
     list.clear();
     for(Esame esame in _esami){
-      list.add( Container(
-        height: 50,
-        child: Center(child: Row(
+      list.add( Expanded(child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            Text(esame.descrizione),
-            Text(esame.voto),
-            Text(esame.crediti),
+          children: <Widget>[
+            Expanded(child: Text(esame.descrizione)) ,
+            Expanded(child: Text(esame.voto)) ,
+            Expanded(child: Text(esame.crediti)) ,
           ],
         )),
-      ));
+      );
     }
     return list;
-  }
+  } //--------temp
+  //----------------------------------------------------dataProcessor() v1
   Future<int> _studentProcessor(String pasta) async{
     final codicePersonaRegex = RegExp(r'[0-9]{8}');
     final nomeRegex = RegExp(r'[^\s][A -Z]{0,}');
@@ -354,18 +347,9 @@ class WebViewExampleState extends State<WebViewExample> {
       }
     }
     await _studentProcessor(_pastoneRows[1]+_pastoneRows[3]);
-    _printEsami();
     return 0;
   }
-  void _printEsami() {
-    for(Esame esame in _esami){
-      print(esame.descrizione);
-    }
-  }
-  //------------------------------------------------------Boot load
-  Widget _buildLoadingScreen(){
-    return Text('loading...');
-  }
+
 
 
 }
