@@ -11,39 +11,31 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'studente.dart';
 import 'sessione.dart';
 import 'esame.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
+
 
 //--------------------------------------------------------------------------Main
 
 void main() {
-  runApp(const MyApp());
-}
-
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Welcome to Flutter',
-      home: WebViewExample()
-    );
-  }
+  runApp(PoliStats());
 }
 
 //-------------------------------------------------------------------Application
 
-class WebViewExample extends StatefulWidget {
+class PoliStats extends StatefulWidget {
   @override
-  WebViewExampleState createState() => WebViewExampleState();
+  PoliStatsState createState() => PoliStatsState();
 }
 
-class WebViewExampleState extends State<WebViewExample> {
+class PoliStatsState extends State<PoliStats> {
   final _studente= Studente.empty();
   final _esami = <Esame>{};
-  final _sessioni = <Sessione>[];
+  final _sessioni = <Sessione>{};
 
-  final _pastoneRows = <String>[];
+  final _sites = <String>{
+    'https://servizionline.polimi.it/portaleservizi/portaleservizi/controller/servizi/Servizi.do?evn_srv=evento&idServizio=2161',
+  };
+  bool isLoading =false;
   final cookieManager = WebviewCookieManager();
   late WebViewController controller;
   final _cookies = <Cookie>{};
@@ -51,12 +43,26 @@ class WebViewExampleState extends State<WebViewExample> {
 
 
   @override
+  //--------------------------------------------------------------Update()
+  Future<int> _update() async{
+    //1
+    await _loadSessioni();
+    //2
+    bool sessionAreValid = await _testSessioni();
+    return 0;
+  }
+  //--------------------------------------------------------------Test Sessioni
+  Future <bool> _testSessioni() async{
 
-  //-------------------------------------------------------------loadFileData()
 
-  Future<int> _loadFileData() async {
+    return true;
+  }
+  //--------------------------------------------------------------Load Data
+
+  Future<int> _loadData() async {
     await _loadEsami();
     await _loadStudente();
+    isLoading=false;
     return 0;
   }
   Future<int> _loadStudente() async{
@@ -104,7 +110,7 @@ class WebViewExampleState extends State<WebViewExample> {
       return 1;
     }
     else{
-      List<Sessione> sessioni = Sessione.decode(jsonSessioni);
+      Set<Sessione> sessioni = Sessione.decode(jsonSessioni);
       //print(sessioni.first.url);
       _sessioni.clear();
       for(Sessione sessione in sessioni){
@@ -114,7 +120,8 @@ class WebViewExampleState extends State<WebViewExample> {
     return 0;
   }
 
-  //-----------------------------------------------------------writeStudente()
+  //-------------------------------------------------------------Write Data
+
   Future<int> _writeStudente() async{
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String jsonStudente = jsonEncode(_studente);
@@ -137,7 +144,7 @@ class WebViewExampleState extends State<WebViewExample> {
     return 0;
   }
 
-  //-----------------------------------------------------------clearAllData()
+  //--------------------------------------------------------------Clear data
   Future<int> _clearAllData() async{
     SharedPreferences prefs = await SharedPreferences.getInstance();
     prefs.clear();
@@ -145,14 +152,32 @@ class WebViewExampleState extends State<WebViewExample> {
     return 0;
   }
   //-----------------------------------------------------------initState()
+  @override
   void initState() {
     super.initState();
     // Enable virtual display.
+    isLoading=true;
+    _loadData();
+
     if (Platform.isAndroid) WebView.platform = AndroidWebView();
   }
   //----------------------------------------------------------build
   Widget build(BuildContext context) {
-    return Scaffold(
+    return MaterialApp(
+      title: 'Welcome to Flutter',
+      theme: ThemeData(
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+        ),
+      ),
+      home: buildScaffold(),
+    );
+
+  }
+  Widget buildScaffold() => isLoading
+      ? Text("Loading...")
+      : Scaffold(
       appBar: AppBar(
         centerTitle: true,
         title: Text("PoliStats"),
@@ -169,12 +194,14 @@ class WebViewExampleState extends State<WebViewExample> {
           ),
         ],
       ),
-      body: _buildLogin(),
+      body: _buildHome(),
     );
-  }
+
   //-----------------------------------------------------------routing
   Future<void> _pushHomepage() async {
-    await getWebsiteData();
+    var tableRows = await _getWebsiteTableRows(_sessioni.last);
+    await _dataProcessor(tableRows);
+
     Navigator.of(context).push(
         MaterialPageRoute<void>(
             builder: (context){
@@ -190,7 +217,6 @@ class WebViewExampleState extends State<WebViewExample> {
     );
   }
   Future<void> _pushWebView() async {
-    await getWebsiteData();
     Navigator.of(context).push(
         MaterialPageRoute<void>(
             builder: (context){
@@ -199,22 +225,24 @@ class WebViewExampleState extends State<WebViewExample> {
                   centerTitle: true,
                   title: const Text('Saved Suggestions'),
                 ),
-                body: _buildLogin(),
+                body: _buildWebViewLogin(),
               );
             }
         )
     );
   }
-  //--------------------------------------------------------Login handler()
-  Future<void> collectCookies(String url) async {
+  //--------------------------------------------------------Login handling
+  Future<void> _collectCookies(String url) async {
+    List<Cookie> cookies = <Cookie>[];
     this._cookies.clear();
     final gotCookies = await cookieManager.getCookies(url);
     for (var item in gotCookies) {
-      this._cookies.add(item);
+      cookies.add(item);
     }
-    this._url=url;
+    _sessioni.add(Sessione(webId: '',url: url, cookie:cookies.last.toString()));
+    print("sessione aggiunta");
   }
-  Widget _buildLogin(){
+  Widget _buildWebViewLogin(){
     return WillPopScope(
       onWillPop: () async {
         if(await controller.canGoBack()) {
@@ -246,8 +274,8 @@ class WebViewExampleState extends State<WebViewExample> {
             onWebViewCreated: (controller) {
               this.controller = controller;
             },
-            onPageFinished: (String url) {
-              collectCookies(url);
+            onPageFinished: (String url) async {
+              await _collectCookies(url);
             },
             gestureNavigationEnabled: true,
           )
@@ -255,33 +283,24 @@ class WebViewExampleState extends State<WebViewExample> {
     );
   }
   //-------------------------------------------------------getWebsiteData()
-  Future getWebsiteData() async {
-    _pastoneRows.clear();
-    int i=1;
+  Future<List<String>> _getWebsiteTableRows(Sessione sessione) async {
+    List<String> tableRows = <String>[];
     http.Response response = await http.get(
-        Uri.parse(_url),
-        headers: {'Cookie': _cookies.last.toString()}
+        Uri.parse(sessione.url),
+        headers: {'Cookie': sessione.cookie.toString()}
     );
     dom.Document document = parser.parse(response.body);
     for (dom.Element element in document.getElementsByTagName("tr")) {
-      this._pastoneRows.add(element.text);
-      //file.writeAsString(element.text);
-      //print(element.text);
+      tableRows.add(element.text);
     }
-    await _dataProcessor();
-
+    return tableRows;
   }
   //------------------------------------------------------_buildHome() v0
   Widget _buildHome(){
-    if(_pastoneRows.isEmpty){
-      return Text('Si è verificato un minchia di errore, si prega di riprovare a loggare');
-    }
-    else{
       return ListView(
         padding: const EdgeInsets.all(8),
         children: _buildList(),
       );
-    }
   }
   String _buildMedia(){
     double somma=0;
@@ -412,14 +431,14 @@ class WebViewExampleState extends State<WebViewExample> {
     return 1;
 
   }
-  Future<int> _dataProcessor() async{
+  Future<int> _dataProcessor(List<String> tableRows) async{
     _esami.clear();
-    for(String pasta in _pastoneRows){
+    for(String pasta in tableRows){
       if(pasta.contains("Stato esame")){
         await _examProcessor(pasta);
       }
     }
-    await _studentProcessor(_pastoneRows[1]+_pastoneRows[3]);
+    await _studentProcessor(tableRows[1]+tableRows[3]);
     return 0;
   }
 

@@ -39,7 +39,13 @@ dependencies:
   webview_flutter: ^3.0.4
   webview_cookie_manager: ^2.0.6
   shared_preferences: ^2.0.15
+  flutter_native_splash: ^2.2.7
 
+
+
+flutter_native_splash:
+  color: "#ffffff"
+  image: assets/polimilogo.png
 
 
 dev_dependencies:
