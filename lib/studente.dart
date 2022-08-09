@@ -1,12 +1,21 @@
 class Studente{
-  String codicePersona;
-  String matricola;
-  String nome;
-  String cognome;
-  String email;
-  String corsoDiStudi;
+  late String codicePersona;
+  late String matricola;
+  late String nome;
+  late String cognome;
+  late String email;
+  late String corsoDiStudi;
 
   Studente({required this.codicePersona, required this.matricola, required this.nome,required this.cognome,required this.email,required this.corsoDiStudi});
+
+  Studente.empty(){
+    this.codicePersona='';
+    this.matricola='';
+    this.nome='';
+    this.cognome='';
+    this.email='';
+    this.corsoDiStudi='';
+  }
 
   Map<String, dynamic> toJson(){
     return{

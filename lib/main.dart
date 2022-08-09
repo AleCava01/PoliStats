@@ -39,7 +39,7 @@ class WebViewExample extends StatefulWidget {
 }
 
 class WebViewExampleState extends State<WebViewExample> {
-  final _studente=new Studente(corsoDiStudi: '', nome: '', matricola: '', email: '', cognome: '', codicePersona: '');
+  final _studente= Studente.empty();
   final _esami = <Esame>{};
   final _sessioni = <Sessione>[];
 
@@ -53,6 +53,7 @@ class WebViewExampleState extends State<WebViewExample> {
   @override
 
   //-------------------------------------------------------------loadFileData()
+
   Future<int> _loadFileData() async {
     await _loadEsami();
     await _loadStudente();
@@ -63,6 +64,7 @@ class WebViewExampleState extends State<WebViewExample> {
     String jsonStudente = prefs.getString('studente_key') ?? '';
     if(jsonStudente==''){
       print("No data");
+      return 1;
     }
     else{
       //print('Loaded json $jsonStudente');
@@ -78,13 +80,40 @@ class WebViewExampleState extends State<WebViewExample> {
     return 0;
   }
   Future<int> _loadEsami() async{
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String jsonEsami = prefs.getString('esami_key') ?? '';
+    if(jsonEsami==''){
+      print("No data");
+      return 1;
+    }
+    else{
+      Set<Esame> esami = Esame.decode(jsonEsami);
+      //print(esami.first.descrizione);
+      _esami.clear();
+      for(Esame esame in esami){
+        _esami.add(esame);
+      }
+    }
     return 0;
-
   }
   Future<int> _loadSessioni() async{
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String jsonSessioni = prefs.getString('sessioni_key') ?? '';
+    if(jsonSessioni ==''){
+      print("No data");
+      return 1;
+    }
+    else{
+      List<Sessione> sessioni = Sessione.decode(jsonSessioni);
+      //print(sessioni.first.url);
+      _sessioni.clear();
+      for(Sessione sessione in sessioni){
+        _sessioni.add(sessione);
+      }
+    }
     return 0;
-
   }
+
   //-----------------------------------------------------------writeStudente()
   Future<int> _writeStudente() async{
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -93,8 +122,23 @@ class WebViewExampleState extends State<WebViewExample> {
     prefs.setString('studente_key',jsonStudente);
     return 0;
   }
-  //-----------------------------------------------------------clearData()
-  Future<int> _clearData() async{
+  Future<int> _writeEsami() async{
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String jsonEsami = Esame.encode(_esami);
+    print("Generated json esami $jsonEsami");
+    prefs.setString('esami_key',jsonEsami);
+    return 0;
+  }
+  Future<int> _writeSessioni() async{
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String jsonSessioni = Sessione.encode(_sessioni);
+    print("Generated json sessioni $jsonSessioni");
+    prefs.setString('sessioni_key',jsonSessioni);
+    return 0;
+  }
+
+  //-----------------------------------------------------------clearAllData()
+  Future<int> _clearAllData() async{
     SharedPreferences prefs = await SharedPreferences.getInstance();
     prefs.clear();
     print("Data cleared");
@@ -280,7 +324,7 @@ class WebViewExampleState extends State<WebViewExample> {
       style: ButtonStyle(
         foregroundColor: MaterialStateProperty.all<Color>(Colors.blue),
       ),
-      onPressed: () async {await _clearData(); },
+      onPressed: () async {await _clearAllData(); },
       child: Text('Erasa'),
     )
     );
