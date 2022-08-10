@@ -12,7 +12,7 @@ import 'studente.dart';
 import 'sessione.dart';
 import 'esame.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
-
+import 'webView.dart';
 
 //--------------------------------------------------------------------------Main
 
@@ -35,122 +35,53 @@ class PoliStatsState extends State<PoliStats> {
   final _sites = <String>{
     'https://servizionline.polimi.it/portaleservizi/portaleservizi/controller/servizi/Servizi.do?evn_srv=evento&idServizio=2161',
   };
+
   bool isLoading =false;
-  final cookieManager = WebviewCookieManager();
-  late WebViewController controller;
-  final _cookies = <Cookie>{};
-  var _url = '';
 
 
   @override
   //--------------------------------------------------------------Update()
-  Future<int> _update() async{
+  Future<int> _update(BuildContext context) async{
     //1
     await _loadSessioni();
     //2
     bool sessionAreValid = await _testSessioni();
+    print(sessionAreValid);
+    if(!sessionAreValid){
+      _pushWebView(context);
+      return 1;
+    }
+    else{
+      for(Sessione sessione in _sessioni){
+        if(sessione.url.contains("www12.ceda.polimi.it/portale_carriera_studente")){
+          List<String> tableRows= await _getWebsiteTableRows(sessione);
+          int result = await _dataProcessor(tableRows);
+          if(result==0){
+            await _writeEsami();
+            await _writeStudente();
+          }
+        }
+      }
+    }
+
     return 0;
   }
   //--------------------------------------------------------------Test Sessioni
   Future <bool> _testSessioni() async{
-
-
-    return true;
-  }
-  //--------------------------------------------------------------Load Data
-
-  Future<int> _loadData() async {
-    await _loadEsami();
-    await _loadStudente();
-    isLoading=false;
-    return 0;
-  }
-  Future<int> _loadStudente() async{
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String jsonStudente = prefs.getString('studente_key') ?? '';
-    if(jsonStudente==''){
-      print("No data");
-      return 1;
+    if(_sessioni.isEmpty){
+      return false;
     }
-    else{
-      //print('Loaded json $jsonStudente');
-      Map<String, dynamic> map = jsonDecode(jsonStudente);
-      Studente studente = Studente.fromJson(map);
-      _studente.nome=studente.nome;
-      _studente.corsoDiStudi=studente.corsoDiStudi;
-      _studente.codicePersona=studente.codicePersona;
-      _studente.matricola=studente.matricola;
-      _studente.email=studente.email;
-      _studente.cognome=studente.cognome;
+    var tableRows = await _getWebsiteTableRows(_sessioni.first);
+    var tableText='';
+    for(String row in tableRows){
+      tableText+=row;
     }
-    return 0;
-  }
-  Future<int> _loadEsami() async{
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String jsonEsami = prefs.getString('esami_key') ?? '';
-    if(jsonEsami==''){
-      print("No data");
-      return 1;
+    if(tableText.contains('Preferiti')){
+      return true;
     }
-    else{
-      Set<Esame> esami = Esame.decode(jsonEsami);
-      //print(esami.first.descrizione);
-      _esami.clear();
-      for(Esame esame in esami){
-        _esami.add(esame);
-      }
-    }
-    return 0;
-  }
-  Future<int> _loadSessioni() async{
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String jsonSessioni = prefs.getString('sessioni_key') ?? '';
-    if(jsonSessioni ==''){
-      print("No data");
-      return 1;
-    }
-    else{
-      Set<Sessione> sessioni = Sessione.decode(jsonSessioni);
-      //print(sessioni.first.url);
-      _sessioni.clear();
-      for(Sessione sessione in sessioni){
-        _sessioni.add(sessione);
-      }
-    }
-    return 0;
+    return false;
   }
 
-  //-------------------------------------------------------------Write Data
-
-  Future<int> _writeStudente() async{
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String jsonStudente = jsonEncode(_studente);
-    print("Generated json studente $jsonStudente");
-    prefs.setString('studente_key',jsonStudente);
-    return 0;
-  }
-  Future<int> _writeEsami() async{
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String jsonEsami = Esame.encode(_esami);
-    print("Generated json esami $jsonEsami");
-    prefs.setString('esami_key',jsonEsami);
-    return 0;
-  }
-  Future<int> _writeSessioni() async{
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String jsonSessioni = Sessione.encode(_sessioni);
-    print("Generated json sessioni $jsonSessioni");
-    prefs.setString('sessioni_key',jsonSessioni);
-    return 0;
-  }
-
-  //--------------------------------------------------------------Clear data
-  Future<int> _clearAllData() async{
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    prefs.clear();
-    print("Data cleared");
-    return 0;
-  }
   //-----------------------------------------------------------initState()
   @override
   void initState() {
@@ -164,38 +95,49 @@ class PoliStatsState extends State<PoliStats> {
   //----------------------------------------------------------build
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Welcome to Flutter',
       theme: ThemeData(
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.white,
           foregroundColor: Colors.black,
         ),
       ),
-      home: buildScaffold(),
+      home: Builder(
+        builder: (context) => Center(
+          child:Scaffold(
+              appBar: AppBar(
+                centerTitle: true,
+                title: Text("PoliStats"),
+                actions:[
+                  IconButton(
+                    onPressed: () {
+                      _pushWebView(context);
+                    },
+                    icon: const Icon(Icons.web),
+                    tooltip: 'Esami',
+                  ),
+                  IconButton(
+                    onPressed: () {
+                      _update(context);
+                    },
+                    icon: const Icon(Icons.update),
+                    tooltip: 'WebView',
+                  ),
+                ],
+              ),
+              body: _loadingCheck(),
+          )
+        )
+      )
     );
-
   }
-  Widget buildScaffold() => isLoading
-      ? Text("Loading...")
-      : Scaffold(
-      appBar: AppBar(
-        centerTitle: true,
-        title: Text("PoliStats"),
-        actions:[
-          IconButton(
-            onPressed: _pushHomepage,
-            icon: const Icon(Icons.list),
-            tooltip: 'Esami',
-          ),
-          IconButton(
-            onPressed: _pushWebView,
-            icon: const Icon(Icons.star),
-            tooltip: 'WebView',
-          ),
-        ],
-      ),
-      body: _buildHome(),
-    );
+  Widget _loadingCheck(){
+    if(isLoading){
+      return Text("Loading...");
+    }
+    else{
+      return _buildHome();
+    }
+  }
 
   //-----------------------------------------------------------routing
   Future<void> _pushHomepage() async {
@@ -216,72 +158,22 @@ class PoliStatsState extends State<PoliStats> {
         )
     );
   }
-  Future<void> _pushWebView() async {
-    Navigator.of(context).push(
-        MaterialPageRoute<void>(
-            builder: (context){
-              return Scaffold(
-                appBar: AppBar(
-                  centerTitle: true,
-                  title: const Text('Saved Suggestions'),
-                ),
-                body: _buildWebViewLogin(),
-              );
-            }
-        )
-    );
+  Future<void> _pushWebView(BuildContext context) async {
+    print("pushing webview");
+    Navigator.of(context)
+        .push(MaterialPageRoute(
+          builder: (context) => const SecondRoute(),
+        ))
+        .then((value) async {
+          isLoading=true;
+          await _update(context);
+          await _loadData();
+        });
+
+
   }
   //--------------------------------------------------------Login handling
-  Future<void> _collectCookies(String url) async {
-    List<Cookie> cookies = <Cookie>[];
-    this._cookies.clear();
-    final gotCookies = await cookieManager.getCookies(url);
-    for (var item in gotCookies) {
-      cookies.add(item);
-    }
-    _sessioni.add(Sessione(webId: '',url: url, cookie:cookies.last.toString()));
-    print("sessione aggiunta");
-  }
-  Widget _buildWebViewLogin(){
-    return WillPopScope(
-      onWillPop: () async {
-        if(await controller.canGoBack()) {
-          controller.goBack();
-        }
-        return false;
-      },
-      child:Scaffold(
-          appBar: AppBar(
-            title: const Text('WebView'),
-            actions: [
-              IconButton(
-                  onPressed: () async{
-                    if(await controller.canGoBack()) {
-                      controller.goBack();
-                    }
-                  },
-                  icon: Icon(Icons.arrow_back)
-              ),
-              IconButton(
-                  onPressed: () => controller.reload(),
-                  icon:Icon(Icons.refresh)
-              ),
-            ],
-          ),
-          body: WebView(
-            initialUrl: 'https://servizionline.polimi.it/portaleservizi/portaleservizi/controller/servizi/Servizi.do?evn_srv=evento&idServizio=2161',
-            javascriptMode: JavascriptMode.unrestricted,
-            onWebViewCreated: (controller) {
-              this.controller = controller;
-            },
-            onPageFinished: (String url) async {
-              await _collectCookies(url);
-            },
-            gestureNavigationEnabled: true,
-          )
-      ),
-    );
-  }
+
   //-------------------------------------------------------getWebsiteData()
   Future<List<String>> _getWebsiteTableRows(Sessione sessione) async {
     List<String> tableRows = <String>[];
@@ -323,7 +215,7 @@ class PoliStatsState extends State<PoliStats> {
   List<Widget> _buildList()  {
     var list = <Widget>[];
     list.clear();
-    list.add(TextButton(
+    /*list.add(TextButton(
       style: ButtonStyle(
         foregroundColor: MaterialStateProperty.all<Color>(Colors.blue),
       ),
@@ -339,14 +231,21 @@ class PoliStatsState extends State<PoliStats> {
       child: Text('Carica'),
     )
     );
+
+    */
     list.add(TextButton(
       style: ButtonStyle(
         foregroundColor: MaterialStateProperty.all<Color>(Colors.blue),
       ),
       onPressed: () async {await _clearAllData(); },
       child: Text('Erasa'),
-    )
-    );
+    ));
+    list.add(Text(_studente.nome));
+    list.add(Text(_studente.cognome));
+    list.add(Text(_studente.codicePersona));
+    list.add(Text(_studente.corsoDiStudi.replaceAll('\n', ' ')));
+    list.add(Text(_studente.matricola));
+    list.add(Text("--------------------------------------"));
     for(Esame esame in _esami){
       list.add( Expanded(child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -358,6 +257,20 @@ class PoliStatsState extends State<PoliStats> {
         )),
       );
     }
+    list.add(Text("--------------------------------------"));
+    for(Sessione sessione in _sessioni){
+      list.add( Expanded(child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: <Widget>[
+          Expanded(child: Text(sessione.webId)) ,
+          Expanded(child: Text(sessione.url)) ,
+          Expanded(child: Text(sessione.cookie)) ,
+        ],
+      )),
+      );
+    }
+
+
     return list;
   } //--------temp
   //----------------------------------------------------dataProcessor() v1
@@ -441,7 +354,95 @@ class PoliStatsState extends State<PoliStats> {
     await _studentProcessor(tableRows[1]+tableRows[3]);
     return 0;
   }
+  //--------------------------------------------------------------Load Data
 
+  Future<int> _loadData() async {
+    await _loadEsami();
+    await _loadStudente();
+    isLoading=false;
+    print("data loaded");
+    return 0;
+  }
+  Future<int> _loadStudente() async{
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String jsonStudente = prefs.getString('studente_key') ?? '';
+    if(jsonStudente==''){
+      print("No data");
+      return 1;
+    }
+    else{
+      //print('Loaded json $jsonStudente');
+      Map<String, dynamic> map = jsonDecode(jsonStudente);
+      Studente studente = Studente.fromJson(map);
+      _studente.nome=studente.nome;
+      _studente.corsoDiStudi=studente.corsoDiStudi;
+      _studente.codicePersona=studente.codicePersona;
+      _studente.matricola=studente.matricola;
+      _studente.email=studente.email;
+      _studente.cognome=studente.cognome;
+    }
+    return 0;
+  }
+  Future<int> _loadEsami() async{
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String jsonEsami = prefs.getString('esami_key') ?? '';
+    if(jsonEsami==''){
+      print("No data");
+      return 1;
+    }
+    else{
+      Set<Esame> esami = Esame.decode(jsonEsami);
+      //print(esami.first.descrizione);
+      _esami.clear();
+      for(Esame esame in esami){
+        _esami.add(esame);
+      }
+    }
+    return 0;
+  }
+  Future<int> _loadSessioni() async{
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String jsonSessioni = prefs.getString('sessioni_key') ?? '';
+    if(jsonSessioni ==''){
+      print("No data");
+      return 1;
+    }
+    else{
+      Set<Sessione> sessioni = Sessione.decode(jsonSessioni);
+      //print(sessioni.first.url);
+      _sessioni.clear();
+      for(Sessione sessione in sessioni){
+        _sessioni.add(sessione);
+      }
+    }
+    return 0;
+  }
+
+  //-------------------------------------------------------------Write Data
+
+  Future<int> _writeStudente() async{
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String jsonStudente = jsonEncode(_studente);
+    print("Generated json studente $jsonStudente");
+    prefs.setString('studente_key',jsonStudente);
+    return 0;
+  }
+  Future<int> _writeEsami() async{
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String jsonEsami = Esame.encode(_esami);
+    print("Generated json esami $jsonEsami");
+    prefs.setString('esami_key',jsonEsami);
+    return 0;
+  }
+
+
+  //--------------------------------------------------------------Clear data
+  Future<int> _clearAllData() async{
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    prefs.clear();
+    print("Data cleared");
+    return 0;
+  }
 
 
 }
